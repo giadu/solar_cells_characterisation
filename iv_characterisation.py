@@ -138,6 +138,49 @@ def generate_metric_csv(metric_name: str, all_data: Dict[str, List[Dict]], outpu
             writer.writerow(row)
 
 
+def generate_summary_csv(all_data: Dict[str, List[Dict]], output_path: str):
+    """
+    Genera un archivo CSV resumen con todas las métricas.
+
+    Args:
+        all_data: Diccionario con {filename: [experiments]}
+        output_path: Ruta del archivo de salida
+    """
+    # Ordenar archivos alfabéticamente
+    sorted_files = sorted(all_data.keys())
+
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+
+        # Header - Fila 1: Nombres de métricas
+        header_row1 = ['Filename', 'Cell', 'Jsc', '', 'Voc', '', 'Fill Factor', '', 'Efficiency', '']
+        writer.writerow(header_row1)
+
+        # Header - Fila 2: fs y bs
+        header_row2 = ['', '', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs']
+        writer.writerow(header_row2)
+
+        # Iterar por cada archivo
+        for filename in sorted_files:
+            experiments = all_data[filename]
+
+            # Cada experimento es una fila
+            for experiment in experiments:
+                row = [
+                    filename,
+                    experiment.get('comment', ''),
+                    experiment.get('Jsc', {}).get('fs', ''),
+                    experiment.get('Jsc', {}).get('bs', ''),
+                    experiment.get('Voc', {}).get('fs', ''),
+                    experiment.get('Voc', {}).get('bs', ''),
+                    experiment.get('Fill Factor', {}).get('fs', ''),
+                    experiment.get('Fill Factor', {}).get('bs', ''),
+                    experiment.get('Efficiency', {}).get('fs', ''),
+                    experiment.get('Efficiency', {}).get('bs', '')
+                ]
+                writer.writerow(row)
+
+
 def main():
     """Función principal del script."""
     if len(sys.argv) < 2:
@@ -173,6 +216,11 @@ def main():
         print(f"\nGenerando {output_file}...")
         generate_metric_csv(metric, all_data, output_file)
         print(f"  ✓ {output_file} creado")
+
+    # Generar archivo resumen
+    print(f"\nGenerando summary.csv...")
+    generate_summary_csv(all_data, 'summary.csv')
+    print(f"  ✓ summary.csv creado")
 
     print("\n¡Proceso completado!")
 
