@@ -81,6 +81,14 @@ def parse_csv_file(filepath: str) -> List[Dict[str, any]]:
                         'bs': parts[3].strip() if len(parts) > 3 else ''
                     }
 
+                elif metric_line.startswith('Rs / ohm,'):
+                    parts = metric_line.split(',')
+                    experiment['Rs'] = {
+                        'avg': parts[1].strip() if len(parts) > 1 else '',
+                        'fs': parts[2].strip() if len(parts) > 2 else '',
+                        'bs': parts[3].strip() if len(parts) > 3 else ''
+                    }
+
                 i += 1
 
             experiments.append(experiment)
@@ -153,11 +161,11 @@ def generate_summary_csv(all_data: Dict[str, List[Dict]], output_path: str):
         writer = csv.writer(f)
 
         # Header - Fila 1: Nombres de métricas
-        header_row1 = ['Filename', 'Cell', 'Jsc', '', 'Voc', '', 'Fill Factor', '', 'Efficiency', '']
+        header_row1 = ['Filename', 'Cell', 'Jsc', '', 'Voc', '', 'Fill Factor', '', 'Efficiency', '', 'Rs', '']
         writer.writerow(header_row1)
 
         # Header - Fila 2: fs y bs
-        header_row2 = ['', '', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs']
+        header_row2 = ['', '', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs', 'fs', 'bs']
         writer.writerow(header_row2)
 
         # Iterar por cada archivo
@@ -176,7 +184,9 @@ def generate_summary_csv(all_data: Dict[str, List[Dict]], output_path: str):
                     experiment.get('Fill Factor', {}).get('fs', ''),
                     experiment.get('Fill Factor', {}).get('bs', ''),
                     experiment.get('Efficiency', {}).get('fs', ''),
-                    experiment.get('Efficiency', {}).get('bs', '')
+                    experiment.get('Efficiency', {}).get('bs', ''),
+                    experiment.get('Rs', {}).get('fs', ''),
+                    experiment.get('Rs', {}).get('bs', '')
                 ]
                 writer.writerow(row)
 
