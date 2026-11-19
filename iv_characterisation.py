@@ -38,6 +38,9 @@ def parse_csv_file(filepath: str) -> List[Dict[str, any]]:
                 if comment_line.startswith('Comment') or comment_line.startswith('Coment'):
                     experiment['comment'] = comment_line.split(',')[1].strip() if ',' in comment_line else ''
 
+            # Columnas de la curva I-V (se definen al encontrar "Voltage / V,")
+            curve_cols = None
+
             # Buscar las métricas en las siguientes líneas
             i += 1
             while i < len(lines):
@@ -88,6 +91,33 @@ def parse_csv_file(filepath: str) -> List[Dict[str, any]]:
                         'fs': parts[2].strip() if len(parts) > 2 else '',
                         'bs': parts[3].strip() if len(parts) > 3 else ''
                     }
+
+                # Inicio de la curva I-V: ubicar las columnas por nombre
+                elif metric_line.startswith('Voltage / V,'):
+                    headers = [h.strip() for h in metric_line.split(',')]
+                    if 'J1 / mA cm^-2' in headers and 'J2 / mA cm^-2' in headers:
+                        curve_cols = (
+                            headers.index('Voltage / V'),
+                            headers.index('J1 / mA cm^-2'),
+                            headers.index('J2 / mA cm^-2'),
+                        )
+                        experiment['curve'] = []
+                    else:
+                        print(f"  Warning: curva sin columnas J1/J2 en {filepath}")
+
+                # Puntos de la curva I-V: una fila numérica por voltaje
+                elif curve_cols and metric_line:
+                    parts = [p.strip() for p in metric_line.split(',')]
+                    v_col, fs_col, bs_col = curve_cols
+                    try:
+                        float(parts[v_col])
+                        experiment['curve'].append({
+                            'voltage': parts[v_col],
+                            'fs': parts[fs_col] if len(parts) > fs_col else '',
+                            'bs': parts[bs_col] if len(parts) > bs_col else ''
+                        })
+                    except (ValueError, IndexError):
+                        curve_cols = None
 
                 i += 1
 
@@ -191,6 +221,73 @@ def generate_summary_csv(all_data: Dict[str, List[Dict]], output_path: str):
                 writer.writerow(row)
 
 
+def generate_iv_curves_csv(all_data: Dict[str, List[Dict]], output_path: str):
+    """
+    Genera un archivo CSV con las curvas I-V (J1 = fs, J2 = bs) de cada experimento.
+
+    Formato similar a jsc.csv, pero con un par de columnas fs/bs por experimento
+    y una fila por punto de voltaje.
+
+    Args:
+        all_data: Diccionario con {filename: [experiments]}
+        output_path: Ruta del archivo de salida
+    """
+    # Lista de (filename, experimento) en el mismo orden que summary.csv
+    curves = [
+        (filename, experiment)
+        for filename in sorted(all_data.keys())
+        for experiment in all_data[filename]
+        if experiment.get('curve')
+    ]
+
+    if not curves:
+        print("  Warning: no se encontraron curvas I-V")
+
+    # Columna de voltaje: se toma de la curva con más puntos
+    longest = max((exp['curve'] for _, exp in curves), key=len, default=[])
+    voltages = [point['voltage'] for point in longest]
+
+    # Avisar si alguna curva usa voltajes distintos (las filas no coincidirían)
+    for filename, experiment in curves:
+        curve_voltages = [point['voltage'] for point in experiment['curve']]
+        if any(float(v) != float(ref) for v, ref in zip(curve_voltages, voltages)):
+            print(f"  Warning: voltajes distintos en {filename} / "
+                  f"{experiment.get('comment', '')}; revisar alineación de filas")
+
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+
+        # Fila 1: nombres de archivos
+        header_row1 = ['Filename']
+        for filename, _ in curves:
+            header_row1.extend([filename, ''])
+        writer.writerow(header_row1)
+
+        # Fila 2: celda (comentario) de cada experimento, sobre fs y sobre bs
+        header_row2 = ['Cell']
+        for _, experiment in curves:
+            cell = experiment.get('comment', '')
+            header_row2.extend([cell, cell])
+        writer.writerow(header_row2)
+
+        # Fila 3: fs, bs repetido
+        header_row3 = ['Voltage / V']
+        for _ in curves:
+            header_row3.extend(['fs', 'bs'])
+        writer.writerow(header_row3)
+
+        # Filas de datos: una por punto de voltaje
+        for idx, voltage in enumerate(voltages):
+            row = [voltage]
+            for _, experiment in curves:
+                curve = experiment['curve']
+                if idx < len(curve):
+                    row.extend([curve[idx]['fs'], curve[idx]['bs']])
+                else:
+                    row.extend(['', ''])
+            writer.writerow(row)
+
+
 def main():
     """Función principal del script."""
     if len(sys.argv) < 2:
@@ -231,6 +328,11 @@ def main():
     print(f"\nGenerando summary.csv...")
     generate_summary_csv(all_data, 'summary.csv')
     print(f"  ✓ summary.csv creado")
+
+    # Generar archivo de curvas I-V
+    print(f"\nGenerando iv_curves.csv...")
+    generate_iv_curves_csv(all_data, 'iv_curves.csv')
+    print(f"  ✓ iv_curves.csv creado")
 
     print("\n¡Proceso completado!")
 
